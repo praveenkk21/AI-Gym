@@ -54,6 +54,12 @@ def main():
             st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
         except Exception as e:
             st.session_state.voice_pipeline = None
+            st.session_state.voice_pipeline_error = str(e)
+
+    if st.session_state.get("voice_pipeline_error"):
+        st.error(st.session_state.voice_pipeline_error)
+
+    st.write("Voice Pipeline:", st.session_state.get("voice_pipeline"))
 
     workout_started = st.session_state.get("workout_started", False)
     
@@ -114,8 +120,6 @@ def main():
             st.badge(f"⏱️ {sleep_time} Secs", color="orange")
 
             end_session_button = st.button("End Workout", key="end_session_button", width="stretch")
-
-            print(exercise, sets, reps)
                    
             if end_session_button:
                 st.session_state["workout_started"] = False
