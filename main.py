@@ -14,6 +14,7 @@ from services.tracking.metrics import sync_metrics_update
 
 
 from groq import Groq
+from dotenv import load_dotenv
 from services.coaching.llm import LLMCoach
 from services.coaching.tts import TextToSpeech
 from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
@@ -37,6 +38,8 @@ def main():
         return
     
     initial_session_defaults()
+    
+    load_dotenv()
 
     if "voice_pipeline" not in st.session_state:
         try:
@@ -54,12 +57,11 @@ def main():
             st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
         except Exception as e:
             st.session_state.voice_pipeline = None
-            st.session_state.voice_pipeline_error = str(e)
 
-    if st.session_state.get("voice_pipeline_error"):
-        st.error(st.session_state.voice_pipeline_error)
+    # if st.session_state.get("voice_pipeline_error"):
+    #     st.error(st.session_state.voice_pipeline_error)
 
-    st.write("Voice Pipeline:", st.session_state.get("voice_pipeline"))
+    # st.write("Voice Pipeline:", st.session_state.get("voice_pipeline"))
 
     workout_started = st.session_state.get("workout_started", False)
     
