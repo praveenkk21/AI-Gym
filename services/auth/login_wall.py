@@ -1,5 +1,4 @@
 import os
-import secrets
 import streamlit as st
 from urllib.parse import urlencode
 import httpx
@@ -31,13 +30,12 @@ def _redirect_uri() -> str:
     return os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501")
 
 
-def _build_google_auth_url(state: str) -> str:
+def _build_google_auth_url() -> str:
     params = {
         "client_id": _google_client_id(),
         "redirect_uri": _redirect_uri(),
         "response_type": "code",
         "scope": "openid email profile",
-        "state": state,
         "access_type": "offline",
         "prompt": "select_account",
     }
@@ -72,21 +70,10 @@ def _exchange_code_for_user(code: str) -> dict | None:
 
 
 def _handle_oauth_callback() -> bool:
-    """
-    If the URL contains ?code= and state matches, exchange the code and log in.
-    Returns True if login succeeded.
-    """
     params = st.query_params
     code = params.get("code")
-    returned_state = params.get("state")
 
-    if not code or not returned_state:
-        return False
-
-    expected_state = st.session_state.get("oauth_state")
-    if returned_state != expected_state:
-        st.error("OAuth state mismatch — possible CSRF. Please try again.")
-        st.query_params.clear()
+    if not code:
         return False
 
     userinfo = _exchange_code_for_user(code)
@@ -102,7 +89,6 @@ def _handle_oauth_callback() -> bool:
     user = get_or_create_google_user(google_id, email, name)
     st.session_state["username"] = user["username"]
     st.session_state["user_id"] = user["id"]
-    st.session_state.pop("oauth_state", None)
     return True
 
 
@@ -122,10 +108,7 @@ def render_login_wall() -> bool:
     if google_configured:
         st.markdown("")
         if st.button("Continue with Google", use_container_width=True, type="primary"):
-            state = secrets.token_urlsafe(16)
-            st.session_state["oauth_state"] = state
-            auth_url = _build_google_auth_url(state)
-            # open in the same tab via a meta-redirect injected into the page
+            auth_url = _build_google_auth_url()
             st.markdown(
                 f'<meta http-equiv="refresh" content="0; url={auth_url}">',
                 unsafe_allow_html=True,
