@@ -19,15 +19,32 @@ _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 def _google_client_id() -> str:
-    return os.environ.get("GOOGLE_CLIENT_ID", "")
+    v = os.environ.get("GOOGLE_CLIENT_ID", "")
+    if not v and hasattr(st, "secrets") and "GOOGLE_CLIENT_ID" in st.secrets:
+        v = st.secrets["GOOGLE_CLIENT_ID"]
+    return v
 
 
 def _google_client_secret() -> str:
-    return os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    v = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not v and hasattr(st, "secrets") and "GOOGLE_CLIENT_SECRET" in st.secrets:
+        v = st.secrets["GOOGLE_CLIENT_SECRET"]
+    return v
 
 
 def _redirect_uri() -> str:
-    return os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501")
+    v = os.environ.get("GOOGLE_REDIRECT_URI", "")
+    if not v and hasattr(st, "secrets") and "GOOGLE_REDIRECT_URI" in st.secrets:
+        v = st.secrets["GOOGLE_REDIRECT_URI"]
+    if v:
+        return v
+    # auto-detect from the current page URL so it works on any host
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(st.context.url)
+        return f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        return "http://localhost:8501"
 
 
 def _build_google_auth_url() -> str:
