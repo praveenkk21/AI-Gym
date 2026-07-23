@@ -1,9 +1,4 @@
-import os
 import streamlit as st
-from urllib.parse import urlencode
-import httpx
-from dotenv import load_dotenv
-
 from services.persistence.exercise_repository import (
     create_user,
     get_user,
@@ -11,135 +6,16 @@ from services.persistence.exercise_repository import (
     get_or_create_google_user,
 )
 
-load_dotenv()
 
-_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-_GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
-
-
-def _google_client_id() -> str:
-    v = os.environ.get("GOOGLE_CLIENT_ID", "")
-    if not v and hasattr(st, "secrets") and "GOOGLE_CLIENT_ID" in st.secrets:
-        v = st.secrets["GOOGLE_CLIENT_ID"]
-    return v
-
-
-def _google_client_secret() -> str:
-    v = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-    if not v and hasattr(st, "secrets") and "GOOGLE_CLIENT_SECRET" in st.secrets:
-        v = st.secrets["GOOGLE_CLIENT_SECRET"]
-    return v
-
-
-def _redirect_uri() -> str:
-    v = os.environ.get("GOOGLE_REDIRECT_URI", "")
-    if not v and hasattr(st, "secrets") and "GOOGLE_REDIRECT_URI" in st.secrets:
-        v = st.secrets["GOOGLE_REDIRECT_URI"]
-    if v:
-        return v
+def _google_configured() -> bool:
     try:
-        headers = st.context.headers
-        host = (
-            headers.get("x-forwarded-host")
-            or headers.get("host")
-            or "localhost:8501"
+        return (
+            hasattr(st, "login")
+            and hasattr(st, "secrets")
+            and "auth" in st.secrets
         )
-        proto = headers.get("x-forwarded-proto") or ("https" if "localhost" not in host else "http")
-        return f"{proto}://{host}"
     except Exception:
-        pass
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(st.context.url)
-        return f"{parsed.scheme}://{parsed.netloc}"
-    except Exception:
-        return "http://localhost:8501"
-
-
-def _build_google_auth_url() -> str:
-    params = {
-        "client_id": _google_client_id(),
-        "redirect_uri": _redirect_uri(),
-        "response_type": "code",
-        "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "select_account",
-    }
-    return f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
-
-
-def _google_button() -> None:
-    auth_url = _build_google_auth_url()
-    st.markdown(
-        f"""
-        <a href="{auth_url}" target="_top" style="
-            display: block;
-            width: 100%;
-            padding: 0.5rem 1rem;
-            background-color: #181D2A;
-            border: 1px solid rgba(255,255,255,0.08);
-            color: #fff;
-            text-align: center;
-            text-decoration: none;
-            font-family: 'AdobeClean', sans-serif;
-            font-size: 0.95rem;
-            box-sizing: border-box;
-        ">Continue with Google</a>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _exchange_code_for_user(code: str) -> dict | None:
-    redirect = _redirect_uri()
-    try:
-        resp = httpx.post(
-            _GOOGLE_TOKEN_URL,
-            data={
-                "code": code,
-                "client_id": _google_client_id(),
-                "client_secret": _google_client_secret(),
-                "redirect_uri": redirect,
-                "grant_type": "authorization_code",
-            },
-            timeout=10,
-        )
-        if not resp.is_success:
-            st.error(f"Google token exchange failed ({resp.status_code}). redirect_uri used: `{redirect}`")
-            return None
-        access_token = resp.json().get("access_token")
-        info = httpx.get(
-            _GOOGLE_USERINFO_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10,
-        )
-        info.raise_for_status()
-        return info.json()
-    except Exception as e:
-        st.error(f"Google sign-in failed: {e}. redirect_uri used: `{redirect}`")
-        return None
-
-
-def _handle_oauth_callback() -> bool:
-    code = st.query_params.get("code")
-    if not code:
         return False
-
-    userinfo = _exchange_code_for_user(code)
-    st.query_params.clear()
-
-    if userinfo is None:
-        return False
-
-    google_id = userinfo.get("sub")
-    email = userinfo.get("email", "")
-    name = userinfo.get("name", email.split("@")[0])
-
-    user = get_or_create_google_user(google_id, email, name)
-    st.session_state["username"] = user["username"]
-    st.session_state["user_id"] = user["id"]
-    return True
 
 
 def render_footer():
@@ -179,10 +55,15 @@ def render_login_wall() -> bool:
     if st.session_state.get("user_id") is not None:
         return True
 
-    if _handle_oauth_callback():
+    # handle Streamlit's native OAuth callback
+    if _google_configured() and hasattr(st, "user") and st.user.is_logged_in:
+        google_id = getattr(st.user, "sub", None) or st.user.email
+        email = st.user.email or ""
+        name = getattr(st.user, "name", None) or email.split("@")[0]
+        user = get_or_create_google_user(google_id, email, name)
+        st.session_state["username"] = user["username"]
+        st.session_state["user_id"] = user["id"]
         st.rerun()
-
-    google_configured = bool(_google_client_id() and _google_client_secret())
 
     st.markdown(
         """
@@ -247,9 +128,10 @@ def render_login_wall() -> bool:
             st.session_state["user_id"] = user["id"]
             st.rerun()
 
-        if google_configured:
+        if _google_configured():
             st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
-            _google_button()
+            if st.button("Continue with Google", use_container_width=True, key="google_login"):
+                st.login("google")
 
     with register_tab:
         with st.form("register_form", clear_on_submit=False):
@@ -276,9 +158,10 @@ def render_login_wall() -> bool:
             st.session_state["user_id"] = user["id"]
             st.rerun()
 
-        if google_configured:
+        if _google_configured():
             st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
-            _google_button()
+            if st.button("Continue with Google", use_container_width=True, key="google_register"):
+                st.login("google")
 
     render_footer()
     return False
