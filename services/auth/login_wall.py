@@ -69,6 +69,28 @@ def _build_google_auth_url() -> str:
     return f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 
+def _google_button() -> None:
+    auth_url = _build_google_auth_url()
+    st.markdown(
+        f"""
+        <a href="{auth_url}" target="_self" style="
+            display: block;
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background-color: #181D2A;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            font-family: 'AdobeClean', sans-serif;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        ">Continue with Google</a>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _exchange_code_for_user(code: str) -> dict | None:
     redirect = _redirect_uri()
     try:
@@ -83,7 +105,7 @@ def _exchange_code_for_user(code: str) -> dict | None:
             },
             timeout=10,
         )
-        if not resp.ok:
+        if not resp.is_success:
             st.error(f"Google token exchange failed ({resp.status_code}). redirect_uri used: `{redirect}`")
             return None
         access_token = resp.json().get("access_token")
@@ -100,9 +122,7 @@ def _exchange_code_for_user(code: str) -> dict | None:
 
 
 def _handle_oauth_callback() -> bool:
-    params = st.query_params
-    code = params.get("code")
-
+    code = st.query_params.get("code")
     if not code:
         return False
 
@@ -144,7 +164,6 @@ def render_footer():
             color: rgba(255,255,255,0.65);
             text-decoration: none;
             font-weight: 500;
-            transition: color 0.2s;
         }
         .aigym-footer a:hover { color: #fff; }
         </style>
@@ -165,7 +184,6 @@ def render_login_wall() -> bool:
 
     google_configured = bool(_google_client_id() and _google_client_secret())
 
-    # ── hero ────────────────────────────────────────────────
     st.markdown(
         """
         <style>
@@ -173,10 +191,7 @@ def render_login_wall() -> bool:
             text-align: center;
             padding: 2.5rem 0 1.5rem;
         }
-        .login-hero .logo {
-            font-size: 3rem;
-            line-height: 1;
-        }
+        .login-hero .logo { font-size: 3rem; line-height: 1; }
         .login-hero h1 {
             font-size: 2rem !important;
             font-weight: 700 !important;
@@ -212,7 +227,6 @@ def render_login_wall() -> bool:
         unsafe_allow_html=True,
     )
 
-    # ── tabs ─────────────────────────────────────────────────
     login_tab, register_tab = st.tabs(["Log In", "Register"])
 
     with login_tab:
@@ -235,7 +249,7 @@ def render_login_wall() -> bool:
 
         if google_configured:
             st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
-            st.link_button("Continue with Google", url=_build_google_auth_url(), use_container_width=True)
+            _google_button()
 
     with register_tab:
         with st.form("register_form", clear_on_submit=False):
@@ -264,7 +278,7 @@ def render_login_wall() -> bool:
 
         if google_configured:
             st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
-            st.link_button("Continue with Google", url=_build_google_auth_url(), use_container_width=True)
+            _google_button()
 
     render_footer()
     return False
