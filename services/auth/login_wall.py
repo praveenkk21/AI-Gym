@@ -33,14 +33,11 @@ def _google_client_secret() -> str:
 
 
 def _redirect_uri() -> str:
-    # 1. explicit env var
     v = os.environ.get("GOOGLE_REDIRECT_URI", "")
     if not v and hasattr(st, "secrets") and "GOOGLE_REDIRECT_URI" in st.secrets:
         v = st.secrets["GOOGLE_REDIRECT_URI"]
     if v:
         return v
-
-    # 2. derive from forwarded headers (Streamlit Cloud sits behind a proxy)
     try:
         headers = st.context.headers
         host = (
@@ -52,8 +49,6 @@ def _redirect_uri() -> str:
         return f"{proto}://{host}"
     except Exception:
         pass
-
-    # 3. last resort: parse the page URL
     try:
         from urllib.parse import urlparse
         parsed = urlparse(st.context.url)
@@ -127,25 +122,97 @@ def _handle_oauth_callback() -> bool:
     return True
 
 
+def render_footer():
+    st.markdown(
+        """
+        <style>
+        .aigym-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #0A0D14;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            padding: 10px 0;
+            text-align: center;
+            font-size: 13px;
+            color: rgba(255,255,255,0.4);
+            z-index: 9999;
+            font-family: 'AdobeClean', sans-serif;
+        }
+        .aigym-footer a {
+            color: rgba(255,255,255,0.65);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .aigym-footer a:hover { color: #fff; }
+        </style>
+        <div class="aigym-footer">
+            Created by <a href="https://www.linkedin.com/in/praveenkk21" target="_blank">Praveen</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_login_wall() -> bool:
     if st.session_state.get("user_id") is not None:
         return True
 
-    # handle Google OAuth callback before rendering UI
     if _handle_oauth_callback():
         st.rerun()
 
-    st.title("💪 Baireps - AI fitness coach")
-    st.markdown("### Welcome! Please log in or create an account.")
-
     google_configured = bool(_google_client_id() and _google_client_secret())
 
-    if google_configured:
-        st.markdown("")
-        st.link_button("Continue with Google", url=_build_google_auth_url(), use_container_width=True, type="primary")
-        st.markdown("---")
-        st.markdown("<p style='text-align:center;color:#888;margin:-8px 0 8px'>or sign in with username & password</p>", unsafe_allow_html=True)
+    # ── hero ────────────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        .login-hero {
+            text-align: center;
+            padding: 2.5rem 0 1.5rem;
+        }
+        .login-hero .logo {
+            font-size: 3rem;
+            line-height: 1;
+        }
+        .login-hero h1 {
+            font-size: 2rem !important;
+            font-weight: 700 !important;
+            margin: 0.4rem 0 0.25rem !important;
+            letter-spacing: -0.5px;
+        }
+        .login-hero p {
+            color: rgba(255,255,255,0.45);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+        .login-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 1.2rem 0;
+            color: rgba(255,255,255,0.25);
+            font-size: 12px;
+        }
+        .login-divider::before,
+        .login-divider::after {
+            content: '';
+            flex: 1;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        </style>
+        <div class="login-hero">
+            <div class="logo">💪</div>
+            <h1>bAIreps</h1>
+            <p>AI-powered gym coach — track every rep, perfect every set</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+    # ── tabs ─────────────────────────────────────────────────
     login_tab, register_tab = st.tabs(["Log In", "Register"])
 
     with login_tab:
@@ -165,6 +232,10 @@ def render_login_wall() -> bool:
             st.session_state["username"] = user["username"]
             st.session_state["user_id"] = user["id"]
             st.rerun()
+
+        if google_configured:
+            st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
+            st.link_button("Continue with Google", url=_build_google_auth_url(), use_container_width=True)
 
     with register_tab:
         with st.form("register_form", clear_on_submit=False):
@@ -191,4 +262,9 @@ def render_login_wall() -> bool:
             st.session_state["user_id"] = user["id"]
             st.rerun()
 
+        if google_configured:
+            st.markdown('<div class="login-divider">or</div>', unsafe_allow_html=True)
+            st.link_button("Continue with Google", url=_build_google_auth_url(), use_container_width=True)
+
+    render_footer()
     return False
